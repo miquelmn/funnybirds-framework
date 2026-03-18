@@ -23,7 +23,6 @@ class AbstractExplainer:
         self.explainer = explainer
         self.explainer_name = type(self.explainer).__name__
         self.baseline = baseline
-        print(self.explainer_name)
 
     def explain(self, input, target=None, *args, **kwargs):
         explainer = self.explainer
@@ -143,7 +142,6 @@ class ViTGradCamExplainer(AbstractExplainer):
         attribution = self.explainer.generate_cam_attn(input_, index=target).reshape(1, 1, 14, 14)
         m = transforms.Resize((H, W), interpolation=Image.NEAREST)
         attribution = m(attribution)
-        print(attribution.shape)
         return attribution
 
 
