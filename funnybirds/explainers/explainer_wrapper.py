@@ -5,8 +5,7 @@ from torchvision import transforms
 import numpy as np
 from PIL import Image
 
-from src.explainers import adversarial_explainer as aaa
-from src.models.ViT.ViT_explanation_generator import Baselines, LRP
+from funnybirds.models.ViT.ViT_explanation_generator import Baselines, LRP
 
 
 def get_p_thresholds():
@@ -129,22 +128,6 @@ class AbstractExplainer:
     def get_p_thresholds(self):
         return np.linspace(0.01, 0.50, num=80)
 
-
-class AAAExplainer(AbstractExplainer):
-
-    def __init__(self, model, explainer, device=None):
-        super().__init__(explainer)
-        self.model = model
-        self.explainer = aaa.AdversarialExplainer(model, nb_classes=50)
-
-        if device is None:
-            device = torch.device("cpu") if not torch.cuda.is_available() else torch.device(
-                "cuda:0")
-        self.device = device
-
-    def explain(self, input, target=None, *args, **kwargs):
-        res = self.explainer(input)
-        return torch.Tensor(res).to(self.deviceç)
 
 
 class ViTGradCamExplainer(AbstractExplainer):

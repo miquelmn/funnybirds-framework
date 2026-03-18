@@ -1,3 +1,5 @@
+from gc import disable
+
 from tqdm import tqdm
 from enum import Enum
 from scipy import stats
@@ -6,10 +8,10 @@ import re
 import torch
 from torch.utils.data import DataLoader
 
-from src.datasets.funny_birds import FunnyBirds
+from funnybirds.datasets.funny_birds import FunnyBirds
 
 
-def accuracy_protocol(model, args):
+def accuracy_protocol(model, args, verbose=1):
     class Summary(Enum):
         NONE = 0
         AVERAGE = 1
@@ -82,7 +84,7 @@ def accuracy_protocol(model, args):
 
     device = 'cuda:' + str(args.gpu)
 
-    for samples in tqdm(test_loader):
+    for samples in tqdm(test_loader, disable = (verbose < 1)):
         images = samples['image']
         target = samples['class_idx']
         if args.gpu is not None:
@@ -108,7 +110,7 @@ def __handle_args(args, data, device):
     if args is not None and device is None:
         device = args.gpu
     elif args is None and device is None:
-        device = "cpu"
+        device = torch.device("cpu")
 
     return data, device
 
@@ -120,7 +122,7 @@ def __prepare_dataloader(data):
 
     return test_dataset, test_loader
 
-def controlled_synthetic_data_check_protocol(model, explainer, args=None, data=None, device=None):
+def controlled_synthetic_data_check_protocol(model, explainer, args=None, data=None, device=None, verbose=1):
     data, device = __handle_args(args, data, device)
     transforms = None
 
@@ -132,14 +134,14 @@ def controlled_synthetic_data_check_protocol(model, explainer, args=None, data=N
     for threshold in thresholds:
         mcsdc_for_thresholds[threshold] = 0
     number_valid_samples = 0
-    for samples in tqdm(test_loader):
+    for samples in tqdm(test_loader, disable = (verbose < 1)):
         images = samples['image']
         target = samples['class_idx']
         part_maps = samples['part_map']
-        if device is not None:
-            images = images.cuda(device, non_blocking=True)
-            part_maps = part_maps.cuda(device, non_blocking=True)
-            target = target.cuda(device, non_blocking=True)
+        if device is not None and device.type != "cpu":
+            images = images.to(device, non_blocking=True)
+            part_maps = part_maps.to(device, non_blocking=True)
+            target = target.to(device, non_blocking=True)
 
         # make sure that model correctly classifies instance
         output = model(images)
@@ -172,7 +174,7 @@ def controlled_synthetic_data_check_protocol(model, explainer, args=None, data=N
     return mcsdc_for_thresholds
 
 
-def single_deletion_protocol(model, explainer, args=None, data=None, device=None):
+def single_deletion_protocol(model, explainer, args=None, data=None, device=None, verbose=1):
     data, device = __handle_args(args, data, device)
     transforms = None
 
@@ -182,17 +184,17 @@ def single_deletion_protocol(model, explainer, args=None, data=None, device=None
 
     correlations = []
     number_valid_samples = 0
-    for sample in tqdm(test_loader):
+    for sample in tqdm(test_loader, disable = (verbose < 1)):
         image = sample['image']
         target = sample['class_idx']
         part_map = sample['part_map']
         params = sample['params']
         class_idxs = sample['class_idx']
         image_idxs = sample['image_idx']
-        if device is not None:
-            image = image.cuda(device, non_blocking=True)
-            part_map = part_map.cuda(device, non_blocking=True)
-            target = target.cuda(device, non_blocking=True)
+        if device is not None and device.type != "cpu":
+            image = image.to(device, non_blocking=True)
+            part_map = part_map.to(device, non_blocking=True)
+            target = target.to(device, non_blocking=True)
 
         score = {}
 
@@ -208,7 +210,7 @@ def single_deletion_protocol(model, explainer, args=None, data=None, device=None
                                                    image_idxs.squeeze(0).item(), [remove_part])[
                 'image']
 
-            image2 = image2.cuda(device, non_blocking=True)
+            image2 = image2.to(device, non_blocking=True)
             output = model(image2)
 
             score[remove_part.split('_')[0]] = output[
@@ -242,7 +244,7 @@ def single_deletion_protocol(model, explainer, args=None, data=None, device=None
 
 
 
-def preservation_check_protocol(model, explainer, args=None, data=None, device=None):
+def preservation_check_protocol(model, explainer, args=None, data=None, device=None, verbose=1):
     data, device = __handle_args(args, data, device)
     test_dataset, test_loader = __prepare_dataloader(data)
 
@@ -252,14 +254,14 @@ def preservation_check_protocol(model, explainer, args=None, data=None, device=N
         scores_for_thresholds[threshold] = []
 
     number_valid_samples = 0
-    for samples in tqdm(test_loader):
+    for samples in tqdm(test_loader, disable = (verbose < 1)):
         images = samples['image']
         part_maps = samples['part_map']
         class_idxs = samples['class_idx']
         image_idxs = samples['image_idx']
-        if device is not None:
-            images = images.cuda(device, non_blocking=True)
-            part_maps = part_maps.cuda(device, non_blocking=True)
+        if device is not None and device.type != "cpu":
+            images = images.to(device, non_blocking=True)
+            part_maps = part_maps.to(device, non_blocking=True)
 
         output = model(images)
         model_prediction_original = output.argmax(1)
@@ -275,7 +277,7 @@ def preservation_check_protocol(model, explainer, args=None, data=None, device=N
             image2 = test_dataset.get_intervention(class_idxs.squeeze(0).item(),
                                                    image_idxs.squeeze(0).item(), parts_removed)[
                 'image']
-            image2 = image2.cuda(device, non_blocking=True)
+            image2 = image2.to(device, non_blocking=True)
             output2 = model(image2)
             model_prediction_removed = output2.argmax(1)
 
@@ -293,7 +295,7 @@ def preservation_check_protocol(model, explainer, args=None, data=None, device=N
     return scores_for_thresholds
 
 
-def deletion_check_protocol(model, explainer, args=None, data=None, device=None):
+def deletion_check_protocol(model, explainer, args=None, data=None, device=None, verbose=1):
     data, device = __handle_args(args, data, device)
     test_dataset, test_loader = __prepare_dataloader(data)
 
@@ -303,14 +305,14 @@ def deletion_check_protocol(model, explainer, args=None, data=None, device=None)
         scores_for_thresholds[threshold] = []
 
     number_valid_samples = 0
-    for samples in tqdm(test_loader):
+    for samples in tqdm(test_loader, disable = (verbose < 1)):
         images = samples['image']
         part_maps = samples['part_map']
         class_idxs = samples['class_idx']
         image_idxs = samples['image_idx']
         if device is not None:
-            images = images.cuda(device, non_blocking=True)
-            part_maps = part_maps.cuda(device, non_blocking=True)
+            images = images.to(device, non_blocking=True)
+            part_maps = part_maps.to(device, non_blocking=True)
 
         output = model(images)
         model_prediction_original = output.argmax(1)
@@ -325,7 +327,7 @@ def deletion_check_protocol(model, explainer, args=None, data=None, device=None)
             image2 = test_dataset.get_intervention(class_idxs.squeeze(0).item(),
                                                    image_idxs.squeeze(0).item(), parts_removed)[
                 'image']
-            image2 = image2.cuda(device, non_blocking=True)
+            image2 = image2.to(device, non_blocking=True)
             output2 = model(image2)
             model_prediction_removed = output2.argmax(1)
 
@@ -342,7 +344,7 @@ def deletion_check_protocol(model, explainer, args=None, data=None, device=None)
 
     return scores_for_thresholds
 
-def target_sensitivity_protocol(model, explainer, args=None, data=None, device=None):
+def target_sensitivity_protocol(model, explainer, args=None, data=None, device=None, verbose=1):
     data, device = __handle_args(args, data, device)
     test_dataset, test_loader = __prepare_dataloader(data)
 
@@ -360,16 +362,16 @@ def target_sensitivity_protocol(model, explainer, args=None, data=None, device=N
 
     assumption_strengths = []
 
-    for sample in tqdm(test_loader):
+    for sample in tqdm(test_loader, disable=(verbose < 1)):
         image = sample['image']
         target = sample['class_idx']
         part_map = sample['part_map']
         class_idxs = sample['class_idx']
         image_idxs = sample['image_idx']
-        if device is not None:
-            image = image.cuda(device, non_blocking=True)
-            part_map = part_map.cuda(device, non_blocking=True)
-            target = target.cuda(device, non_blocking=True)
+
+        image = image.to(device, non_blocking=True)
+        part_map = part_map.to(device, non_blocking=True)
+        target = target.to(device, non_blocking=True)
 
         output = model(image)
 
@@ -395,8 +397,8 @@ def target_sensitivity_protocol(model, explainer, args=None, data=None, device=N
             if found_classes:
                 break
 
-        class1 = torch.tensor([class1]).cuda(device, non_blocking=True)
-        class2 = torch.tensor([class2]).cuda(device, non_blocking=True)
+        class1 = torch.tensor([class1]).to(device)
+        class2 = torch.tensor([class2]).to(device)
 
         # skip sample if assumption does not hold
         # for class a: removing A parts should result in larger drop than removing B parts and
@@ -406,13 +408,13 @@ def target_sensitivity_protocol(model, explainer, args=None, data=None, device=N
         image2 = \
         test_dataset.get_intervention(class_idxs.squeeze(0).item(), image_idxs.squeeze(0).item(),
                                       overlap_target_class1)['image']
-        image2 = image2.cuda(device, non_blocking=True)
+        image2 = image2.to(device, non_blocking=True)
         output_wo_parts_from_class1 = model(image2)
 
         image2 = \
         test_dataset.get_intervention(class_idxs.squeeze(0).item(), image_idxs.squeeze(0).item(),
                                       overlap_target_class2)['image']
-        image2 = image2.cuda(device, non_blocking=True)
+        image2 = image2.to(device, non_blocking=True)
         output_wo_parts_from_class2 = model(image2)
 
         drop_class1_when_rm_class1_parts = output_wo_parts_from_class1[0][class1] - output[0][
@@ -445,6 +447,7 @@ def target_sensitivity_protocol(model, explainer, args=None, data=None, device=N
         for part in overlap_target_class1:
             overlap_target_class1_importance_class1 += part_importances_class1[part]
             overlap_target_class1_importance_class2 += part_importances_class2[part]
+            overlap_target_class1_importance_class2 += part_importances_class2[part]
 
         if overlap_target_class1_importance_class1 > overlap_target_class1_importance_class2:
             target_sensitivity_score.append(1.)
@@ -468,7 +471,7 @@ def target_sensitivity_protocol(model, explainer, args=None, data=None, device=N
     return target_sensitivity_score
 
 
-def distractibility_protocol(model, explainer, args=None, data=None, device=None):
+def distractibility_protocol(model, explainer, args=None, data=None, device=None, verbose=1):
     data, device = __handle_args(args, data, device)
     test_dataset, test_loader = __prepare_dataloader(data)
 
@@ -478,7 +481,7 @@ def distractibility_protocol(model, explainer, args=None, data=None, device=None
         scores_for_thresholds[threshold] = []
 
     number_valid_samples = 0
-    for sample in tqdm(test_loader):
+    for sample in tqdm(test_loader, disable=(verbose < 1)):
         image = sample['image']
         target = sample['class_idx']
         part_map = sample['part_map']
@@ -487,9 +490,9 @@ def distractibility_protocol(model, explainer, args=None, data=None, device=None
         image_idxs = sample['image_idx']
         params = test_dataset.get_params_for_single(params)
         if device is not None:
-            image = image.cuda(device, non_blocking=True)
-            part_map = part_map.cuda(device, non_blocking=True)
-            target = target.cuda(device, non_blocking=True)
+            image = image.to(device, non_blocking=True)
+            part_map = part_map.to(device, non_blocking=True)
+            target = target.to(device, non_blocking=True)
         score = {}
 
         output = model(image)
@@ -503,7 +506,7 @@ def distractibility_protocol(model, explainer, args=None, data=None, device=None
                                                    image_idxs.squeeze(0).item(), [remove_part])[
                 'image']
 
-            image2 = image2.cuda(device, non_blocking=True)
+            image2 = image2.to(device, non_blocking=True)
             output = model(image2)
 
             score[remove_part.split('_')[0]] = output[
@@ -517,7 +520,7 @@ def distractibility_protocol(model, explainer, args=None, data=None, device=None
                                                               image_idxs.squeeze(0).item(), i)[
                 'image']
 
-            image2 = image2.cuda(device, non_blocking=True)
+            image2 = image2.to(device, non_blocking=True)
             output = model(image2)
 
             score['bg_' + str(i).zfill(3)] = output[0, target].item()
@@ -575,9 +578,9 @@ def background_independence_protocol(model, args=None, data=None, device=None):
         class_idxs = sample['class_idx']
         image_idxs = sample['image_idx']
         params = test_dataset.get_params_for_single(params)
-        if device is not None:
-            image = image.cuda(device, non_blocking=True)
-            target = target.cuda(device, non_blocking=True)
+        if device is not None and device.type != "cpu":
+            image = image.to(device, non_blocking=True)
+            target = target.to(device, non_blocking=True)
         score = {}
 
         output = model(image)
@@ -591,7 +594,7 @@ def background_independence_protocol(model, args=None, data=None, device=None):
                                                               image_idxs.squeeze(0).item(), i)[
                 'image']
 
-            image2 = image2.cuda(device, non_blocking=True)
+            image2 = image2.to(device, non_blocking=True)
             output = model(image2)
 
             score['bg_' + str(i).zfill(3)] = output[0, target].item()

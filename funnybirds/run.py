@@ -3,21 +3,23 @@ import random
 import numpy as np
 import torch
 
-from evaluation_protocols import (controlled_synthetic_data_check_protocol,
-                                  single_deletion_protocol, \
-    preservation_check_protocol, deletion_check_protocol, target_sensitivity_protocol, \
-    distractibility_protocol)
+from funnybirds.evaluation_protocols import (controlled_synthetic_data_check_protocol,
+                                             single_deletion_protocol, \
+                                             preservation_check_protocol, deletion_check_protocol,
+                                             target_sensitivity_protocol, \
+                                             distractibility_protocol)
 
-from src.explainers import explainer_wrapper
-
+from funnybirds.explainers import explainer_wrapper
 
 random.seed(0)
 torch.manual_seed(0)
 
+
 def __explainer_2_fb(explainer):
     return explainer_wrapper.AbstractExplainer(explainer)
 
-def __main__(model, explainer, data, device = None):
+
+def run(model, explainer, data, device=None, verbose=0):
     """ Main function to evaluate explainability of a model using Funnybirds framework.
 
     Funnybirds framework evaluates explainability of a model using a combination of several
@@ -37,6 +39,7 @@ def __main__(model, explainer, data, device = None):
         explainer: Explainer object that provides explanations for the model's predictions.
         data: String path to the folder containing the dataset
         device: PyTorch device to run the evaluation on (e.g., 'cpu' or 'cuda').
+        verbose:
 
     Returns:
         mx: The final explainability score computed as the mean of various protocol scores.
@@ -47,15 +50,25 @@ def __main__(model, explainer, data, device = None):
     model = model.to(device)
     model.eval()
 
-    csdc = controlled_synthetic_data_check_protocol(model, explainer)
-    ts = target_sensitivity_protocol(model, explainer, data=data, device=device)
+    explainer = __explainer_2_fb(explainer)
+
+    csdc = controlled_synthetic_data_check_protocol(
+        model,
+        explainer,
+        data=data,
+        device=device,
+        verbose=verbose
+    )
+
+    ts = target_sensitivity_protocol(model, explainer, data=data, device=device, verbose=verbose)
     ts = round(ts, 5)
-    sd = single_deletion_protocol(model, explainer, data=data, device=device)
+    sd = single_deletion_protocol(model, explainer, data=data, device=device, verbose=verbose)
     sd = round(sd, 5)
 
-    pc = preservation_check_protocol(model, explainer, data=data, device=device)
-    dc = deletion_check_protocol(model, explainer, data=data, device=device)
-    distractibility = distractibility_protocol(model, explainer, data=data, device=device)
+    pc = preservation_check_protocol(model, explainer, data=data, device=device, verbose=verbose)
+    dc = deletion_check_protocol(model, explainer, data=data, device=device, verbose=verbose)
+    distractibility = distractibility_protocol(model, explainer, data=data, device=device,
+                                               verbose=verbose)
 
     max_score = 0
     best_threshold = -1

@@ -9,18 +9,20 @@ from models.vgg import vgg16
 from models.ViT.ViT_new import vit_base_patch16_224
 from models.ViT.ViT_LRP import vit_base_patch16_224 as vit_LRP
 from models.model_wrapper import StandardModel, ViTModel
-from evaluation_protocols import accuracy_protocol, controlled_synthetic_data_check_protocol, single_deletion_protocol, preservation_check_protocol, deletion_check_protocol, target_sensitivity_protocol, distractibility_protocol, background_independence_protocol
-from explainers.explainer_wrapper import CaptumAttributionExplainer, ViTGradCamExplainer, ViTRolloutExplainer, ViTCheferLRPExplainer, CustomExplainer
+from evaluation_protocols import accuracy_protocol, controlled_synthetic_data_check_protocol, \
+    single_deletion_protocol, preservation_check_protocol, deletion_check_protocol, \
+    target_sensitivity_protocol, distractibility_protocol, background_independence_protocol
+from funnybirds.explainers.explainer_wrapper import ViTRolloutExplainer, ViTCheferLRPExplainer, AAAExplainer, AbstractExplainer
 
-
-parser = argparse.ArgumentParser(description='FunnyBirds - Explanation Evaluation')
+parser = argparse.ArgumentParser(description='DataFB - Explanation Evaluation')
 parser.add_argument('--data', metavar='DIR', required=True,
                     help='path to dataset (default: imagenet)')
 parser.add_argument('--model', required=True,
                     choices=['resnet50', 'vgg16', 'vit_b_16'],
                     help='model architecture')
 parser.add_argument('--explainer', required=True,
-                    choices=['IntegratedGradients', 'InputXGradient', 'Rollout', 'CheferLRP', 'CustomExplainer'],
+                    choices=['IntegratedGradients', 'InputXGradient', 'Rollout', 'CheferLRP',
+                             'CustomExplainer', 'AAA'],
                     help='explainer')
 parser.add_argument('--checkpoint_name', type=str, required=False, default=None,
                     help='checkpoint name (including dir)')
@@ -33,7 +35,7 @@ parser.add_argument('--batch_size', default=32, type=int,
                     help='batch size for protocols that do not require custom BS such as accuracy')
 parser.add_argument('--nr_itrs', default=2501, type=int,
                     help='batch size for protocols that do not require custom BS such as accuracy')
-                    
+
 parser.add_argument('--accuracy', default=False, action='store_true',
                     help='compute accuracy')
 parser.add_argument('--controlled_synthetic_data_check', default=False, action='store_true',
@@ -52,8 +54,6 @@ parser.add_argument('--background_independence', default=False, action='store_tr
                     help='compute background dependence')
 
 
-
-
 def main():
     args = parser.parse_args()
     device = 'cuda:' + str(args.gpu)
@@ -63,37 +63,40 @@ def main():
 
     # create model
     if args.model == 'resnet50':
-        model = resnet50(num_classes = 50)
+        model = resnet50(num_classes=50)
         model = StandardModel(model)
     elif args.model == 'vgg16':
-        model = vgg16(num_classes = 50)
+        model = vgg16(num_classes=50)
         model = StandardModel(model)
     elif args.model == 'vit_b_16':
         if args.explainer == 'CheferLRP':
             model = vit_LRP(num_classes=50)
         else:
-            model = vit_base_patch16_224(num_classes = 50)
+            model = vit_base_patch16_224(num_classes=50)
         model = ViTModel(model)
     else:
         print('Model not implemented')
-    
+
     if args.checkpoint_name:
-        model.load_state_dict(torch.load(args.checkpoint_name, map_location=torch.device('cpu'))['state_dict'])
+        model.load_state_dict(
+            torch.load(args.checkpoint_name, map_location=torch.device('cpu'))['state_dict'])
     model = model.to(device)
     model.eval()
 
     # create explainer
     if args.explainer == 'InputXGradient':
         explainer = InputXGradient(model)
-        explainer = CaptumAttributionExplainer(explainer)
+        explainer = AbstractExplainer(explainer)
     elif args.explainer == 'IntegratedGradients':
         explainer = IntegratedGradients(model)
-        baseline = torch.zeros((1,3,256,256)).to(device)
-        explainer = CaptumAttributionExplainer(explainer, baseline=baseline)
+        baseline = torch.zeros((1, 3, 256, 256)).to(device)
+        explainer = AbstractExplainer(explainer, baseline=baseline)
     elif args.explainer == 'Rollout':
         explainer = ViTRolloutExplainer(model)
     elif args.explainer == 'CheferLRP':
         explainer = ViTCheferLRPExplainer(model)
+    elif args.explainer == 'AAA':
+        explainer = AAAExplainer(model)
     elif args.explainer == 'CustomExplainer':
         ...
     else:
@@ -136,20 +139,26 @@ def main():
         print('Computing background independence...')
         background_independence = background_independence_protocol(model, args)
         background_independence = round(background_independence, 5)
-    
+
     # select completeness and distractability thresholds such that they maximize the sum of both
     max_score = 0
     best_threshold = -1
     for threshold in csdc.keys():
-        max_score_tmp = csdc[threshold]/3. + pc[threshold]/3. + dc[threshold]/3. + distractibility[threshold]
+        max_score_tmp = csdc[threshold] / 3. + pc[threshold] / 3. + dc[threshold] / 3. + \
+                        distractibility[threshold]
         if max_score_tmp > max_score:
             max_score = max_score_tmp
             best_threshold = threshold
 
     print('FINAL RESULTS:')
     print('Accuracy, CSDC, PC, DC, Distractability, Background independence, SD, TS')
-    print('{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(accuracy, round(csdc[best_threshold],5), round(pc[best_threshold],5), round(dc[best_threshold],5), round(distractibility[best_threshold],5), background_independence, sd, ts))
+    print('{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(accuracy, round(csdc[best_threshold], 5),
+                                                  round(pc[best_threshold], 5),
+                                                  round(dc[best_threshold], 5),
+                                                  round(distractibility[best_threshold], 5),
+                                                  background_independence, sd, ts))
     print('Best threshold:', best_threshold)
+
 
 if __name__ == '__main__':
     main()
