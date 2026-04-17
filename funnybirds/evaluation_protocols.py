@@ -84,7 +84,7 @@ def accuracy_protocol(model, args, verbose=1):
 
     device = 'cuda:' + str(args.gpu)
 
-    for samples in tqdm(test_loader, disable = (verbose < 1)):
+    for samples in tqdm(test_loader, disable = (verbose < 1), desc="Accuracy", leave=False):
         images = samples['image']
         target = samples['class_idx']
         if args.gpu is not None:
@@ -134,7 +134,7 @@ def controlled_synthetic_data_check_protocol(model, explainer, args=None, data=N
     for threshold in thresholds:
         mcsdc_for_thresholds[threshold] = 0
     number_valid_samples = 0
-    for samples in tqdm(test_loader, disable = (verbose < 1)):
+    for samples in tqdm(test_loader, disable = (verbose < 1), desc="CSDC", leave=False):
         images = samples['image']
         target = samples['class_idx']
         part_maps = samples['part_map']
@@ -184,7 +184,7 @@ def single_deletion_protocol(model, explainer, args=None, data=None, device=None
 
     correlations = []
     number_valid_samples = 0
-    for sample in tqdm(test_loader, disable = (verbose < 1)):
+    for sample in tqdm(test_loader, disable = (verbose < 1), desc="Single Deletion", leave=False):
         image = sample['image']
         target = sample['class_idx']
         part_map = sample['part_map']
@@ -254,7 +254,7 @@ def preservation_check_protocol(model, explainer, args=None, data=None, device=N
         scores_for_thresholds[threshold] = []
 
     number_valid_samples = 0
-    for samples in tqdm(test_loader, disable = (verbose < 1)):
+    for samples in tqdm(test_loader, disable = (verbose < 1), desc="Preservation Check", leave=False):
         images = samples['image']
         part_maps = samples['part_map']
         class_idxs = samples['class_idx']
@@ -305,7 +305,7 @@ def deletion_check_protocol(model, explainer, args=None, data=None, device=None,
         scores_for_thresholds[threshold] = []
 
     number_valid_samples = 0
-    for samples in tqdm(test_loader, disable = (verbose < 1)):
+    for samples in tqdm(test_loader, disable = (verbose < 1), desc="Deletion Check", leave=False):
         images = samples['image']
         part_maps = samples['part_map']
         class_idxs = samples['class_idx']
@@ -362,7 +362,7 @@ def target_sensitivity_protocol(model, explainer, args=None, data=None, device=N
 
     assumption_strengths = []
 
-    for sample in tqdm(test_loader, disable=(verbose < 1)):
+    for sample in tqdm(test_loader, disable=(verbose < 1), desc="Target Sensitivity", leave=False):
         image = sample['image']
         target = sample['class_idx']
         part_map = sample['part_map']
@@ -481,7 +481,7 @@ def distractibility_protocol(model, explainer, args=None, data=None, device=None
         scores_for_thresholds[threshold] = []
 
     number_valid_samples = 0
-    for sample in tqdm(test_loader, disable=(verbose < 1)):
+    for sample in tqdm(test_loader, disable=(verbose < 1), desc="Distractibility", leave=False):
         image = sample['image']
         target = sample['class_idx']
         part_map = sample['part_map']
@@ -562,7 +562,7 @@ def distractibility_protocol(model, explainer, args=None, data=None, device=None
 
 
 
-def background_independence_protocol(model, args=None, data=None, device=None):
+def background_independence_protocol(model, args=None, data=None, device=None, verbose=1):
     data, device = __handle_args(args, data, device)
     test_dataset, test_loader = __prepare_dataloader(data)
 
@@ -570,7 +570,7 @@ def background_independence_protocol(model, args=None, data=None, device=None):
     number_relevant_background_parts = 0
 
     number_valid_samples = 0
-    for sample in tqdm(test_loader):
+    for sample in tqdm(test_loader, disable=(verbose < 1), desc="Background Independence", leave=False):
         image = sample['image']
         target = sample['class_idx']
         part_map = sample['part_map']
