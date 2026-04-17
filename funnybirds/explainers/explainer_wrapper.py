@@ -27,7 +27,7 @@ class AbstractExplainer:
     def explain(self, input, target=None, *args, **kwargs):
         explainer = self.explainer
         if hasattr(explainer, 'attribute'):
-            res = explainer.attribute(input, target, *args, **kwargs)
+            res = explainer.attribute(input, target=target, *args, **kwargs)
         elif callable(explainer):
             res = explainer(input, target, *args, **kwargs)
         elif hasattr(explainer, 'explain'):
