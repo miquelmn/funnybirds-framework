@@ -19,7 +19,7 @@ def __explainer_2_fb(explainer):
     return explainer_wrapper.AbstractExplainer(explainer)
 
 
-def run(model, explainer, data, device=None, verbose=0):
+def run(model, explainer, data, device=None, disagregated=False, verbose=0):
     """ Main function to evaluate explainability of a model using Funnybirds framework.
 
     Funnybirds framework evaluates explainability of a model using a combination of several
@@ -85,6 +85,11 @@ def run(model, explainer, data, device=None, verbose=0):
         round(dc[best_threshold], 5),
         round(distractibility[best_threshold], 5)
     ])
-    mx = np.mean([compl, sd, ts])
 
-    return mx
+    results = [compl, sd, ts]
+    mx = np.mean(results)
+
+    if disagregated:
+        return results
+    else:
+        return mx
