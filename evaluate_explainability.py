@@ -4,7 +4,7 @@ import random
 import torch
 from captum.attr import InputXGradient, IntegratedGradients, NoiseTunnel, Saliency
 
-from evaluation_protocols import (
+from funnybirds.evaluation_protocols import (
     accuracy_protocol,
     background_independence_protocol,
     controlled_synthetic_data_check_protocol,
@@ -14,26 +14,28 @@ from evaluation_protocols import (
     single_deletion_protocol,
     target_sensitivity_protocol,
 )
-from explainers.explainer_wrapper import (
+from funnybirds.explainers.explainer_wrapper import (
+    AbstractExplainer,
     CaptumAttributionExplainer,
     ColExplainer,
     ViTCheferLRPExplainer,
     ViTRolloutExplainer,
 )
-from models.model_wrapper import StandardModel, ViTModel
-from models.resnet import resnet50
-from models.vgg import vgg16
-from models.ViT.ViT_LRP import vit_base_patch16_224 as vit_LRP
-from models.ViT.ViT_new import vit_base_patch16_224
+from funnybirds.models.model_wrapper import StandardModel, ViTModel
+from funnybirds.models.resnet import resnet50
+from funnybirds.models.vgg import vgg16
+from funnybirds.models.ViT.ViT_LRP import vit_base_patch16_224 as vit_LRP
+from funnybirds.models.ViT.ViT_new import vit_base_patch16_224
 
-parser = argparse.ArgumentParser(description='FunnyBirds - Explanation Evaluation')
+parser = argparse.ArgumentParser(description='DataFB - Explanation Evaluation')
 parser.add_argument('--data', metavar='DIR', required=True,
                     help='path to dataset (default: imagenet)')
 parser.add_argument('--model', required=True,
                     choices=['resnet50', 'vgg16', 'vit_b_16'],
                     help='model architecture')
 parser.add_argument('--explainer', required=True,
-                    choices=['IntegratedGradients', 'Gradient', 'SG', 'InputXGradient', 'Rollout', 'CheferLRP', 'CustomExplainer', 'AAA', 'MGE', 'CLRP', 'GCW', 'COL'],
+                    choices=['IntegratedGradients', 'Gradient', 'SG', 'InputXGradient', 'Rollout', 'CheferLRP',
+                             'CustomExplainer', 'AAA', 'MGE', 'CLRP', 'GCW', 'COL', 'AAA'],
                     help='explainer')
 parser.add_argument('--checkpoint_name', type=str, required=False, default=None,
                     help='checkpoint name (including dir)')
@@ -46,7 +48,7 @@ parser.add_argument('--batch_size', default=32, type=int,
                     help='batch size for protocols that do not require custom BS such as accuracy')
 parser.add_argument('--nr_itrs', default=2501, type=int,
                     help='batch size for protocols that do not require custom BS such as accuracy')
-                    
+
 parser.add_argument('--accuracy', default=False, action='store_true',
                     help='compute accuracy')
 parser.add_argument('--controlled_synthetic_data_check', default=False, action='store_true',
@@ -65,8 +67,6 @@ parser.add_argument('--background_independence', default=False, action='store_tr
                     help='compute background dependence')
 
 
-
-
 def main():
     args = parser.parse_args()
     device = 'cuda:' + str(args.gpu)
@@ -76,29 +76,30 @@ def main():
 
     # create model
     if args.model == 'resnet50':
-        model = resnet50(num_classes = 50)
+        model = resnet50(num_classes=50)
         model = StandardModel(model)
     elif args.model == 'vgg16':
-        model = vgg16(num_classes = 50)
+        model = vgg16(num_classes=50)
         model = StandardModel(model)
     elif args.model == 'vit_b_16':
         if args.explainer == 'CheferLRP':
             model = vit_LRP(num_classes=50)
         else:
-            model = vit_base_patch16_224(num_classes = 50)
+            model = vit_base_patch16_224(num_classes=50)
         model = ViTModel(model)
     else:
         print('Model not implemented')
-    
+
     if args.checkpoint_name:
-        model.load_state_dict(torch.load(args.checkpoint_name, map_location=torch.device('cpu'))['state_dict'])
+        model.load_state_dict(
+            torch.load(args.checkpoint_name, map_location=torch.device('cpu'))['state_dict'])
     model = model.to(device)
     model.eval()
 
     # create explainer
     if args.explainer == 'InputXGradient':
         explainer = InputXGradient(model)
-        explainer = CaptumAttributionExplainer(explainer)
+        explainer = AbstractExplainer(explainer)
     elif args.explainer == 'IntegratedGradients':
         explainer = IntegratedGradients(model)
         baseline = torch.zeros((1,3,256,256)).to(device)
@@ -158,7 +159,7 @@ def main():
         print('Computing background independence...')
         background_independence = background_independence_protocol(model, args)
         background_independence = round(background_independence, 5)
-    
+
     # select completeness and distractability thresholds such that they maximize the sum of both
     max_score = 0
     best_threshold = -1
@@ -178,6 +179,7 @@ def main():
         print('SD, TS')
         print(f'{sd}\t{ts}')
         
+
 
 if __name__ == '__main__':
     main()

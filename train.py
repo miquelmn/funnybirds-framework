@@ -1,4 +1,4 @@
-# call: python train.py --data /fastdata/rhesse/datasets/FunnyBirds/ --model resnet50 --checkpoint_dir /data/rhesse/FunnyBirds/checkpoints --checkpoint_prefix resnet50_default --pretrained
+# call: python train.py --data /fastdata/rhesse/datasets/DataFB/ --model resnet50 --checkpoint_dir /data/rhesse/DataFB/checkpoints --checkpoint_prefix resnet50_default --pretrained
 
 import argparse
 import os
@@ -12,10 +12,10 @@ import torch.optim
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import StepLR
 
-from datasets.funny_birds import FunnyBirds
-from models.resnet import resnet50
-from models.vgg import vgg16
-from models.ViT.ViT_new import vit_base_patch16_224
+from funnybirds.datasets.funny_birds import FunnyBirds
+from funnybirds.models.resnet import resnet50
+from funnybirds.models import vgg16
+from funnybirds.models.ViT.ViT_new import vit_base_patch16_224
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('--data', metavar='DIR', required=True,
