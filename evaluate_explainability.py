@@ -2,16 +2,29 @@ import argparse
 import random
 
 import torch
-from captum.attr import IntegratedGradients, InputXGradient
+from captum.attr import InputXGradient, IntegratedGradients, NoiseTunnel, Saliency
 
+from evaluation_protocols import (
+    accuracy_protocol,
+    background_independence_protocol,
+    controlled_synthetic_data_check_protocol,
+    deletion_check_protocol,
+    distractibility_protocol,
+    preservation_check_protocol,
+    single_deletion_protocol,
+    target_sensitivity_protocol,
+)
+from explainers.explainer_wrapper import (
+    CaptumAttributionExplainer,
+    ColExplainer,
+    ViTCheferLRPExplainer,
+    ViTRolloutExplainer,
+)
+from models.model_wrapper import StandardModel, ViTModel
 from models.resnet import resnet50
 from models.vgg import vgg16
-from models.ViT.ViT_new import vit_base_patch16_224
 from models.ViT.ViT_LRP import vit_base_patch16_224 as vit_LRP
-from models.model_wrapper import StandardModel, ViTModel
-from evaluation_protocols import accuracy_protocol, controlled_synthetic_data_check_protocol, single_deletion_protocol, preservation_check_protocol, deletion_check_protocol, target_sensitivity_protocol, distractibility_protocol, background_independence_protocol
-from explainers.explainer_wrapper import CaptumAttributionExplainer, ViTGradCamExplainer, ViTRolloutExplainer, ViTCheferLRPExplainer, CustomExplainer
-
+from models.ViT.ViT_new import vit_base_patch16_224
 
 parser = argparse.ArgumentParser(description='FunnyBirds - Explanation Evaluation')
 parser.add_argument('--data', metavar='DIR', required=True,
@@ -20,7 +33,7 @@ parser.add_argument('--model', required=True,
                     choices=['resnet50', 'vgg16', 'vit_b_16'],
                     help='model architecture')
 parser.add_argument('--explainer', required=True,
-                    choices=['IntegratedGradients', 'InputXGradient', 'Rollout', 'CheferLRP', 'CustomExplainer'],
+                    choices=['IntegratedGradients', 'Gradient', 'SG', 'InputXGradient', 'Rollout', 'CheferLRP', 'CustomExplainer', 'AAA', 'MGE', 'CLRP', 'GCW', 'COL'],
                     help='explainer')
 parser.add_argument('--checkpoint_name', type=str, required=False, default=None,
                     help='checkpoint name (including dir)')
@@ -90,16 +103,25 @@ def main():
         explainer = IntegratedGradients(model)
         baseline = torch.zeros((1,3,256,256)).to(device)
         explainer = CaptumAttributionExplainer(explainer, baseline=baseline)
+    elif args.explainer == 'Gradient':
+        explainer = Saliency(model)
+        explainer = CaptumAttributionExplainer(explainer)
+    elif args.explainer == 'SG':
+        explainer = Saliency(model)
+        explainer = NoiseTunnel(explainer)
+        explainer = CaptumAttributionExplainer(explainer)
     elif args.explainer == 'Rollout':
         explainer = ViTRolloutExplainer(model)
     elif args.explainer == 'CheferLRP':
         explainer = ViTCheferLRPExplainer(model)
+    elif args.explainer == "COL":
+        explainer = ColExplainer(model)
     elif args.explainer == 'CustomExplainer':
         ...
     else:
         print('Explainer not implemented')
-
-    accuracy, csdc, pc, dc, distractibility, sd, ts = -1, -1, -1, -1, -1, -1, -1
+    
+    background_independence, accuracy, csdc, pc, dc, distractibility, sd, ts = -1, -1, -1, -1, -1, -1, -1, -1
 
     if args.accuracy:
         print('Computing accuracy...')
@@ -140,16 +162,22 @@ def main():
     # select completeness and distractability thresholds such that they maximize the sum of both
     max_score = 0
     best_threshold = -1
-    for threshold in csdc.keys():
-        max_score_tmp = csdc[threshold]/3. + pc[threshold]/3. + dc[threshold]/3. + distractibility[threshold]
-        if max_score_tmp > max_score:
-            max_score = max_score_tmp
-            best_threshold = threshold
-
-    print('FINAL RESULTS:')
-    print('Accuracy, CSDC, PC, DC, Distractability, Background independence, SD, TS')
-    print('{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(accuracy, round(csdc[best_threshold],5), round(pc[best_threshold],5), round(dc[best_threshold],5), round(distractibility[best_threshold],5), background_independence, sd, ts))
-    print('Best threshold:', best_threshold)
+    if csdc != -1:
+        for threshold in csdc:
+            max_score_tmp = csdc[threshold]/3. + pc[threshold]/3. + dc[threshold]/3. + distractibility[threshold]
+            if max_score_tmp > max_score:
+                max_score = max_score_tmp
+                best_threshold = threshold
+    
+        print('FINAL RESULTS:')
+        print('Accuracy, CSDC, PC, DC, Distractability, Background independence, SD, TS')
+        print(f'{accuracy}\t{round(csdc[best_threshold],5)}\t{round(pc[best_threshold],5)}\t{round(dc[best_threshold],5)}\t{round(distractibility[best_threshold],5)}\t{background_independence}\t{sd}\t{ts}')
+        print('Best threshold:', best_threshold)
+    else:
+        print('FINAL RESULTS:')
+        print('SD, TS')
+        print(f'{sd}\t{ts}')
+        
 
 if __name__ == '__main__':
     main()

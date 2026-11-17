@@ -79,12 +79,14 @@ def accuracy_protocol(model, args):
     top1 = AverageMeter('Acc@1', ':6.2f')
     top5 = AverageMeter('Acc@5', ':6.2f')
 
+    device = 'cuda:' + str(args.gpu)
+    
     for samples in tqdm(test_loader):
         images = samples['image']
         target = samples['class_idx']
         if args.gpu is not None:
-            images = images.cuda(args.gpu, non_blocking=True)
-            target = target.cuda(args.gpu, non_blocking=True)
+            images = images.to(device) #cuda(args.gpu, non_blocking=True)
+            target = target.to(device) #cuda(args.gpu, non_blocking=True)
 
         # compute output
         output = model(images)

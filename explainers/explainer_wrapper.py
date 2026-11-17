@@ -4,8 +4,15 @@ from torchvision import transforms
 
 import numpy as np
 from abc import abstractmethod
-from captum.attr import LayerAttribution
+from captum.attr import LayerAttribution, Saliency
 from PIL import Image
+
+from explainers import adversarial_explainer as aaa
+from explainers import clrp
+from explainers import cw_sp as cw
+from explainers import gradient as MGE
+# from explainers import colsource .venv/bin/activate
+from col import Col, ColX
 
 from models.ViT.ViT_explanation_generator import Baselines, LRP
 
@@ -130,11 +137,78 @@ class CaptumAttributionExplainer(AbstractAttributionExplainer):
         explainer: Captum explanation method
     """
     def explain(self, input, target=None, baseline=None):
-        if self.explainer_name == 'InputXGradient': 
-            return self.explainer.attribute(input, target=target)
-        elif self.explainer_name == 'IntegratedGradients':
+        if self.explainer_name == 'IntegratedGradients':
             return self.explainer.attribute(input, target=target, baselines=self.baseline, n_steps=50)
+        elif self.explainer_name == 'NoiseTunnel':
+            return self.explainer.attribute(input, nt_type='smoothgrad', nt_samples=25, target=target)
+        else:
+            return self.explainer.attribute(input, target=target)
 
+class MultiGradientExplainer(AbstractAttributionExplainer):
+
+    def __init__(self, model):
+        self.model = model
+        self.explainer = MGE.MultiGradientExplainer(model, nb_classes=50)
+
+    def explain(self, input, target=None):
+        with torch.cuda.device(0):
+            res = self.explainer.attribute(input, target)
+        return torch.Tensor(res).to("cuda")
+        
+class AAAExplainer(AbstractAttributionExplainer):
+
+    def __init__(self, model):
+        self.model = model
+        self.explainer = aaa.AdversarialExplainer(model, nb_classes=50)
+
+    def explain(self, input, target=None):
+        res = self.explainer(input)
+        return torch.Tensor(res).to("cuda")
+    
+class ColExplainer(AbstractAttributionExplainer):
+
+    def __init__(self, model):
+        self.model = model
+        self.explainer = Col(Saliency(model), nb_classes=50,  normalization="IMG", softmax=False)
+
+    def explain(self, input, target=None):
+        res = self.explainer.attribute(input, target=target)
+        return torch.Tensor(res).to("cuda")
+
+    
+class ColXExplainer(AbstractAttributionExplainer):
+
+    def __init__(self, model):
+        self.model = model
+        self.explainer = ColX(Saliency(model), nb_classes=50, normalization="IMG", aggregate=False, softmax=False)
+
+    def explain(self, input, target=None):
+        res = self.explainer.attribute(input, target=target)
+        return torch.Tensor(res).to("cuda")
+
+class CLRPExplainer(AbstractAttributionExplainer):
+
+    def __init__(self, model):
+        self.model = model
+        self.explainer = None
+
+    def explain(self, input, target=None):
+        torch.cuda.set_device("cuda")
+        res = clrp.attribute(input, target, self.model)
+        return torch.Tensor(res).to("cuda")
+
+class GCWExplainer(AbstractAttributionExplainer):
+
+    def __init__(self, model):
+        self.model = model
+        self.explainer = cw.MultiGradientCW(model, nb_classes=50)
+
+    def explain(self, input, target=None):
+        with torch.cuda.device(1):
+            res = self.explainer.attribute(input, target)
+        
+        return torch.Tensor(res).to("cuda")
+        
 class ViTGradCamExplainer(AbstractAttributionExplainer):
     def __init__(self, model):
         self.model = model
